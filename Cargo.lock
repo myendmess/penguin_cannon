@@ -2801,7 +2801,15 @@ dependencies = [
  "bevy",
  "blake3",
  "js-sys",
+ "penguin_core",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "penguin_core"
+version = "0.1.0"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]

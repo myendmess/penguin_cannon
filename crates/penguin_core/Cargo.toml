@@ -1,0 +1,18 @@
+[package]
+name = "penguin_core"
+version = "0.1.0"
+edition = "2024"
+
+# Game logic only — biome state machine, chase rules, tuning. No rendering.
+# Kept to minimal bevy features so the test binaries stay small enough to
+# run on this machine (the full engine linked into a windows-gnu test exe
+# crashes at startup; see README "Tests").
+[dependencies]
+bevy = { version = "0.16", default-features = false, features = [
+  "std",
+  "async_executor",
+  "multi_threaded",
+  "bevy_state",
+  "bevy_log",
+  "bevy_color",
+] }

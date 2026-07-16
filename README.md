@@ -41,8 +41,14 @@ python -m http.server 8000 -d web
 
 ## Tests
 
-State-transition logic is covered by unit tests:
+Game logic (biome state machine, orca chase rules) lives in the
+rendering-free `penguin_core` crate, and that's where the tests are:
 
 ```powershell
-cargo test
+cargo test -p penguin_core
 ```
+
+Why the split: on this machine (windows-gnu toolchain, Smart App Control
+enforced) a test binary that links the full engine crashes at startup, so
+the root crate sets `test = false` and all testable logic stays in
+`penguin_core` on minimal Bevy features.

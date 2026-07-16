@@ -1,13 +1,29 @@
+[workspace]
+members = [".", "crates/penguin_core"]
+default-members = ["."]
+
 [package]
 name = "penguin_cannon"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-# cdylib for the wasm bundle (wasm-pack), rlib for the native bin + tests.
+# cdylib for the wasm bundle (wasm-pack), rlib for the native bin.
 crate-type = ["cdylib", "rlib"]
+# Test binaries that link the full engine crash at startup on windows-gnu
+# on this machine; all logic tests live in penguin_core instead.
+# Run them with:  cargo test -p penguin_core
+test = false
+doctest = false
+
+[[bin]]
+name = "penguin_cannon"
+path = "src/main.rs"
+test = false
 
 [dependencies]
+penguin_core = { path = "crates/penguin_core" }
+
 # Default features minus what an endless runner made of primitives doesn't
 # need (gltf, audio, animation, image formats, gamepads, picking, gizmos).
 bevy = { version = "0.16", default-features = false, features = [

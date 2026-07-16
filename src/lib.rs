@@ -4,12 +4,16 @@
 //! and (with a little artillery assistance) sky, trying to reach the
 //! North Pole. Built with Bevy, compiled to WebAssembly.
 
-use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
 
-pub mod tuning;
+// Game logic (states, chase rules, tuning) lives in the rendering-free
+// penguin_core crate so its tests run headless; re-export the modules so
+// game code can keep `crate::states::...` paths.
+pub use penguin_core::{chase, states, tuning};
 
-use tuning::{LANE_WIDTH, TRACK_VIEW_DEPTH};
+pub mod world;
+
+use tuning::GROUND_Y;
 
 /// Builds and runs the game app. Shared by the native binary and the
 /// wasm entry point.
@@ -27,7 +31,8 @@ pub fn run() {
             ..default()
         }))
         .insert_resource(ClearColor(Color::srgb(0.72, 0.86, 0.96)))
-        .add_systems(Startup, (setup_camera_and_light, setup_track, setup_penguin))
+        .add_plugins((states::GameStatePlugin, world::WorldPlugin))
+        .add_systems(Startup, setup_penguin)
         .run();
 }
 
@@ -42,72 +47,6 @@ pub fn start() {
 /// Marker for the player entity (the penguin root).
 #[derive(Component)]
 pub struct Player;
-
-fn setup_camera_and_light(mut commands: Commands) {
-    // Third-person trailing camera: behind and above the penguin,
-    // looking down the track (the penguin runs toward -Z).
-    commands.spawn((
-        Camera3d::default(),
-        Transform::from_xyz(0.0, 5.5, 9.0).looking_at(Vec3::new(0.0, 1.0, -12.0), Vec3::Y),
-        DistanceFog {
-            color: Color::srgb(0.72, 0.86, 0.96),
-            falloff: FogFalloff::Linear {
-                start: TRACK_VIEW_DEPTH * 0.5,
-                end: TRACK_VIEW_DEPTH,
-            },
-            ..default()
-        },
-    ));
-
-    commands.spawn((
-        DirectionalLight {
-            illuminance: 11_000.0,
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.9, -0.4, 0.0)),
-    ));
-
-    commands.insert_resource(AmbientLight {
-        color: Color::srgb(0.8, 0.9, 1.0),
-        brightness: 300.0,
-        ..default()
-    });
-}
-
-/// Three readable lane strips. The center lane is tinted slightly darker so
-/// players can always tell which lane they occupy (Level Designer rule:
-/// the critical path must be visually legible).
-fn setup_track(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let lane_mesh = meshes.add(Cuboid::new(LANE_WIDTH - 0.1, 0.2, TRACK_VIEW_DEPTH * 2.0));
-    let side_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.85, 0.93, 0.98),
-        perceptual_roughness: 0.35,
-        ..default()
-    });
-    let center_material = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.78, 0.88, 0.96),
-        perceptual_roughness: 0.35,
-        ..default()
-    });
-
-    for lane in -1i8..=1 {
-        let material = if lane == 0 {
-            center_material.clone()
-        } else {
-            side_material.clone()
-        };
-        commands.spawn((
-            Mesh3d(lane_mesh.clone()),
-            MeshMaterial3d(material),
-            Transform::from_xyz(lane as f32 * LANE_WIDTH, -0.1, -TRACK_VIEW_DEPTH * 0.5),
-        ));
-    }
-}
 
 /// Blockout penguin: black capsule body, white belly, orange beak.
 /// Grey-box only — art pass comes after mechanics are proven.
@@ -133,7 +72,7 @@ fn setup_penguin(
     });
 
     commands
-        .spawn((Player, Transform::from_xyz(0.0, 0.75, 0.0), Visibility::default()))
+        .spawn((Player, Transform::from_xyz(0.0, GROUND_Y, 0.0), Visibility::default()))
         .with_children(|parent| {
             // Body
             parent.spawn((
