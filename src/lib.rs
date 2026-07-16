@@ -11,7 +11,10 @@ use bevy::prelude::*;
 // game code can keep `crate::states::...` paths.
 pub use penguin_core::{chase, states, tuning};
 
+pub mod chaser;
 pub mod player;
+pub mod spawn;
+pub mod ui;
 pub mod world;
 
 /// Builds and runs the game app. Shared by the native binary and the
@@ -34,6 +37,9 @@ pub fn run() {
             states::GameStatePlugin,
             world::WorldPlugin,
             player::PlayerPlugin,
+            spawn::SpawnPlugin,
+            chaser::ChaserPlugin,
+            ui::UiPlugin,
         ))
         .run();
 }

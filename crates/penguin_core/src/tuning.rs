@@ -76,10 +76,10 @@ pub const ORCA_GAP_REGEN: f32 = 0.8;
 pub const ORCA_SPLASHDOWN_GAP: f32 = 24.0;
 /// Clean running can't push the orca further back than this. [PLACEHOLDER]
 pub const ORCA_MAX_GAP: f32 = 28.0;
-/// Visual mapping: orca's world-Z when caught / at full start gap.
-/// (The camera sits at z=9 looking down -Z; the orca lives between the
-/// player at z=0 and the camera so the threat is always on screen.)
-pub const ORCA_VISUAL_Z: (f32, f32) = (0.9, 6.5);
+/// Visual mapping: orca's world-Z when caught / at maximum gap. The camera
+/// sits at z=9, so at max gap the orca hides behind the viewer and surfaces
+/// into frame as the gap closes — threat reads at a glance.
+pub const ORCA_VISUAL_Z: (f32, f32) = (0.9, 11.5);
 
 // --- Biome cycle -------------------------------------------------------------
 

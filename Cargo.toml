@@ -74,3 +74,17 @@ opt-level = 3
 [profile.release]
 opt-level = "s"
 lto = "thin"
+
+# opt-level "s" miscompiles the glyph rasterization stack on wasm — the
+# first Text spawn hangs the main thread forever. (Dev builds, which
+# optimize these at level 3, render text fine.) Keep them at full opt.
+[profile.release.package.swash]
+opt-level = 3
+[profile.release.package.zeno]
+opt-level = 3
+[profile.release.package.cosmic-text]
+opt-level = 3
+[profile.release.package.rustybuzz]
+opt-level = 3
+[profile.release.package.ttf-parser]
+opt-level = 3
