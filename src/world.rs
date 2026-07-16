@@ -160,14 +160,21 @@ fn setup_track(
 
 /// Re-theme the environment when a biome starts: clear color, fog,
 /// ambient level, and lane materials all switch together.
+///
+/// `TrackMaterials` is `Option` because the initial `OnEnter(Ice)` fires in
+/// `PreStartup`, before `setup_track` has run — the spawn defaults already
+/// match the Ice palette, so skipping that first call is correct.
 fn apply_biome_visuals(
     biome: Res<State<Biome>>,
-    track: Res<TrackMaterials>,
+    track: Option<Res<TrackMaterials>>,
     mut clear: ResMut<ClearColor>,
     mut ambient: ResMut<AmbientLight>,
     mut fog_query: Query<&mut DistanceFog, With<Camera3d>>,
     mut strips: Query<(&LaneStrip, &mut MeshMaterial3d<StandardMaterial>)>,
 ) {
+    let Some(track) = track else {
+        return;
+    };
     let biome = *biome.get();
     let p = palette(biome);
 
