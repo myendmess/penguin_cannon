@@ -1,0 +1,54 @@
+name: Test & Deploy to Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Logic tests live in the rendering-free core crate (see README);
+      # the root crate's test harness is intentionally disabled.
+      - run: cargo test -p penguin_core
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Build wasm bundle
+        run: wasm-pack build --target web --no-typescript --out-dir web/pkg
+      - name: Drop wasm-pack's generated .gitignore from the site payload
+        run: rm -f web/pkg/.gitignore
+      - uses: actions/configure-pages@v5
+        with:
+          # Auto-enables Pages (source: GitHub Actions) on first run.
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
