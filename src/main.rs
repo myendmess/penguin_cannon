@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    penguin_cannon::run();
 }

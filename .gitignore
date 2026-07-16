@@ -1,1 +1,4 @@
 /target
+
+# wasm-pack build artifacts (regenerate with build-wasm.ps1)
+/web/pkg/
