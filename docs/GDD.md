@@ -1,6 +1,6 @@
 # Penguin Cannon — Game Design Document
 
-**Version 0.1** — initial design (changelog at bottom).
+**Version 0.2** — all core mechanics implemented (changelog at bottom).
 
 ## Design Pillars
 
@@ -107,5 +107,18 @@ All values are hypotheses until playtested. `[P]` = placeholder.
 
 ## Changelog
 
+- **0.2** — all mechanics from this document implemented and verified in
+  browser playtests (wasm/WebGL2). Additions from implementation:
+  - Orca screen mapping: the orca hides behind the camera at max gap and
+    surfaces into frame as the gap closes — threat reads without the HUD.
+    (`ORCA_VISUAL_Z`, mapped over `gap / ORCA_MAX_GAP`.)
+  - Gap cap `ORCA_MAX_GAP` (28 m) so clean running can't trivialize the
+    chase forever.
+  - Post-hit stagger window doubles as i-frames: no double penalties while
+    one obstacle cluster passes.
+  - Playtest observations: hit penalty math confirmed (24 m → ~7 m over
+    three unattended hits incl. regen); one full run ended at 3100 pts
+    after two cannon phases — cannon frequency feels generous, flag
+    `CANNON_INTERVAL` for tuning once difficulty passes start.
 - **0.1** — initial document: pillars, core loop, mechanic specs, transition
   graph, tuning table.
