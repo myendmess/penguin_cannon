@@ -107,6 +107,15 @@ All values are hypotheses until playtested. `[P]` = placeholder.
 
 ## Changelog
 
+- **0.3** — penguin art pass and motion blur (branch `features_update`):
+  - Penguin upgraded from 3-primitive blockout to a full primitive model:
+    egg body, head with white face patch, bead eyes, orange beak, two
+    flippers (jog-flap on the ground, spread wide while gliding), orange
+    webbed feet, stubby tail. Hitbox unchanged.
+  - Per-object motion blur on the camera (`MOTION_BLUR_SHUTTER` 0.5,
+    `MOTION_BLUR_SAMPLES` 2, both [PLACEHOLDER]) — the world smears past
+    while the penguin stays sharp. MSAA disabled: incompatible with motion
+    blur under WebGL2, our shipping target.
 - **0.2** — all mechanics from this document implemented and verified in
   browser playtests (wasm/WebGL2). Additions from implementation:
   - Orca screen mapping: the orca hides behind the camera at max gap and

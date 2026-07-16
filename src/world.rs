@@ -1,6 +1,7 @@
 //! Static scene (camera, light, track) and the per-biome environment
 //! switching that gives Ice, Water, and Sky their distinct looks.
 
+use bevy::core_pipeline::motion_blur::MotionBlur;
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
 
@@ -91,6 +92,17 @@ fn setup_camera_and_light(mut commands: Commands) {
             },
             ..default()
         },
+        // Per-object motion blur sells the scroll speed: the world smears
+        // past while the penguin stays sharp. (`..default()` also fills the
+        // webgl2 padding field this struct grows on wasm builds.)
+        MotionBlur {
+            shutter_angle: MOTION_BLUR_SHUTTER,
+            samples: MOTION_BLUR_SAMPLES,
+            ..default()
+        },
+        // Motion blur and MSAA are incompatible under WebGL2, our shipping
+        // target — disable MSAA everywhere for a consistent look.
+        Msaa::Off,
     ));
 
     commands.spawn((

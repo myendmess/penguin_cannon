@@ -56,6 +56,7 @@ impl Plugin for PlayerPlugin {
                     vertical_ice.run_if(in_state(Biome::Ice)),
                     vertical_water.run_if(in_state(Biome::Water)),
                     vertical_sky.run_if(in_state(Biome::Sky)),
+                    animate_flippers,
                 )
                     .chain()
                     .run_if(in_state(RunState::Running)),
@@ -63,28 +64,41 @@ impl Plugin for PlayerPlugin {
     }
 }
 
-/// Blockout penguin: black capsule body, white belly, orange beak.
-/// Grey-box only — art pass comes after mechanics are proven.
+/// Marker for the penguin's flippers; `side` is -1.0 (left) or 1.0 (right).
+#[derive(Component)]
+pub struct Flipper {
+    pub side: f32,
+}
+
+/// The penguin, art-pass edition: egg-shaped body, head with white face
+/// patch and eyes, orange beak, two animated flippers, orange webbed feet,
+/// and a stubby tail. Still primitives only — no external assets, so the
+/// wasm bundle stays self-contained. The collision hitbox in `spawn.rs`
+/// is unchanged.
 fn setup_penguin(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let body_material = materials.add(StandardMaterial {
+    let black = materials.add(StandardMaterial {
         base_color: Color::srgb(0.12, 0.13, 0.17),
         perceptual_roughness: 0.8,
         ..default()
     });
-    let belly_material = materials.add(StandardMaterial {
+    let white = materials.add(StandardMaterial {
         base_color: Color::srgb(0.95, 0.95, 0.93),
         perceptual_roughness: 0.9,
         ..default()
     });
-    let beak_material = materials.add(StandardMaterial {
+    let orange = materials.add(StandardMaterial {
         base_color: Color::srgb(0.95, 0.55, 0.1),
         perceptual_roughness: 0.6,
         ..default()
     });
+
+    let flipper_mesh = meshes.add(Capsule3d::new(0.09, 0.36));
+    let foot_mesh = meshes.add(Sphere::new(0.16));
+    let eye_mesh = meshes.add(Sphere::new(0.05));
 
     commands
         .spawn((
@@ -98,29 +112,100 @@ fn setup_penguin(
             Visibility::default(),
         ))
         .with_children(|parent| {
-            // Body
+            // Body: capsule squashed into an egg silhouette.
             parent.spawn((
-                Mesh3d(meshes.add(Capsule3d::new(0.42, 0.7))),
-                MeshMaterial3d(body_material),
-                Transform::default(),
+                Mesh3d(meshes.add(Capsule3d::new(0.42, 0.55))),
+                MeshMaterial3d(black.clone()),
+                Transform::from_xyz(0.0, -0.06, 0.0).with_scale(Vec3::new(1.0, 1.05, 0.92)),
             ));
-            // Belly: flattened sphere pushed toward the direction of travel (-Z)
+            // Belly: white front, from chest down to the feet.
             parent.spawn((
                 Mesh3d(meshes.add(Sphere::new(0.36))),
-                MeshMaterial3d(belly_material),
-                Transform::from_xyz(0.0, -0.05, -0.18).with_scale(Vec3::new(0.9, 1.1, 0.7)),
+                MeshMaterial3d(white.clone()),
+                Transform::from_xyz(0.0, -0.12, -0.19).with_scale(Vec3::new(0.85, 1.2, 0.6)),
             ));
-            // Beak: cone rotated to point down the track
+            // Head: sits into the body top so the join reads as a neck.
+            parent.spawn((
+                Mesh3d(meshes.add(Sphere::new(0.30))),
+                MeshMaterial3d(black.clone()),
+                Transform::from_xyz(0.0, 0.58, -0.02),
+            ));
+            // Face patch: white oval on the front of the head.
+            parent.spawn((
+                Mesh3d(meshes.add(Sphere::new(0.24))),
+                MeshMaterial3d(white.clone()),
+                Transform::from_xyz(0.0, 0.56, -0.14).with_scale(Vec3::new(0.82, 0.88, 0.55)),
+            ));
+            // Eyes: black beads on the face patch.
+            for side in [-1.0f32, 1.0] {
+                parent.spawn((
+                    Mesh3d(eye_mesh.clone()),
+                    MeshMaterial3d(black.clone()),
+                    Transform::from_xyz(side * 0.11, 0.64, -0.26).with_scale(Vec3::splat(0.9)),
+                ));
+            }
+            // Beak
+            parent.spawn((
+                Mesh3d(meshes.add(Cone {
+                    radius: 0.09,
+                    height: 0.26,
+                })),
+                MeshMaterial3d(orange.clone()),
+                Transform::from_xyz(0.0, 0.54, -0.32)
+                    .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+            ));
+            // Flippers: flattened capsules at the shoulders; animated by
+            // `animate_flippers` (jog-flap on the ground, spread in the sky).
+            for side in [-1.0f32, 1.0] {
+                parent.spawn((
+                    Flipper { side },
+                    Mesh3d(flipper_mesh.clone()),
+                    MeshMaterial3d(black.clone()),
+                    Transform::from_xyz(side * 0.44, 0.05, 0.02)
+                        .with_scale(Vec3::new(0.45, 1.0, 0.75)),
+                ));
+            }
+            // Feet: orange webbed paddles, toed slightly outward.
+            for side in [-1.0f32, 1.0] {
+                parent.spawn((
+                    Mesh3d(foot_mesh.clone()),
+                    MeshMaterial3d(orange.clone()),
+                    Transform::from_xyz(side * 0.17, -0.66, -0.10)
+                        .with_scale(Vec3::new(1.0, 0.35, 1.9))
+                        .with_rotation(Quat::from_rotation_y(side * -0.25)),
+                ));
+            }
+            // Tail: stubby cone sweeping back and up.
             parent.spawn((
                 Mesh3d(meshes.add(Cone {
                     radius: 0.12,
-                    height: 0.32,
+                    height: 0.28,
                 })),
-                MeshMaterial3d(beak_material),
-                Transform::from_xyz(0.0, 0.42, -0.42)
-                    .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+                MeshMaterial3d(black.clone()),
+                Transform::from_xyz(0.0, -0.42, 0.38)
+                    .with_rotation(Quat::from_rotation_x(2.2)),
             ));
         });
+}
+
+/// Flippers flap while running/swimming and lock spread-wide while gliding
+/// through the sky. Rotation is authored around the shoulder's Z axis on
+/// top of the spawn pose.
+fn animate_flippers(
+    time: Res<Time>,
+    biome: Res<State<Biome>>,
+    mut flippers: Query<(&Flipper, &mut Transform)>,
+) {
+    let t = time.elapsed_secs();
+    for (flipper, mut transform) in &mut flippers {
+        let angle = match biome.get() {
+            // Gliding: wings out.
+            Biome::Sky => 1.25,
+            // Jogging/swimming: quick, small flaps.
+            _ => 0.35 + 0.18 * (t * 9.0).sin(),
+        };
+        transform.rotation = Quat::from_rotation_z(flipper.side * -angle);
+    }
 }
 
 fn enter_ice_physics(mut physics: ResMut<BiomePhysics>) {

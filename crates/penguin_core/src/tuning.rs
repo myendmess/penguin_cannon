@@ -86,6 +86,14 @@ pub const ORCA_VISUAL_Z: (f32, f32) = (0.9, 11.5);
 /// Seconds between the timed Ice <-> Water alternation. [PLACEHOLDER]
 pub const BIOME_CYCLE_SECS: f32 = 30.0;
 
+// --- Rendering feel ------------------------------------------------------------
+
+/// Motion blur shutter angle: fraction of a frame the virtual shutter stays
+/// open. 0 = off, 1 = full cinematic smear. [PLACEHOLDER]
+pub const MOTION_BLUR_SHUTTER: f32 = 0.5;
+/// Motion blur sample count — quality vs GPU cost (kept low for WebGL2). [PLACEHOLDER]
+pub const MOTION_BLUR_SAMPLES: u32 = 2;
+
 // --- Scoring ------------------------------------------------------------------
 
 /// Points per fish. Locked.
