@@ -37,6 +37,12 @@ All one-shots use `PlaybackMode::Despawn` (self-cleaning entities); loops
 use `PlaybackMode::Loop` with integer-cycle LFOs authored into the files so
 the wrap point is inaudible.
 
+## Mute
+
+HUD button top-right (tap/click) or the M key. Muting zeroes every live
+sink immediately and suppresses new one-shots; unmuting restarts the
+current biome's ambience bed at its authored volume.
+
 ## Budget & constraints
 
 - **Voice count**: bounded by design, not middleware — 1 ambience loop +

@@ -3,14 +3,24 @@
 
 use bevy::prelude::*;
 
+use crate::audio::Muted;
 use crate::chase::OrcaGap;
+use crate::chaser::{CatchSequence, Orca, catch_finished};
 use crate::player::{Player, TargetLane, Vertical};
 use crate::spawn::{Mover, RunSpeed, Score, SpawnTimers};
 use crate::states::{Altitude, Biome, BiomeCycle, RunState};
+use crate::touch::TouchAction;
+use crate::transitions::LayerTransition;
 use crate::tuning::*;
 
 #[derive(Component)]
 struct ScoreText;
+
+#[derive(Component)]
+struct MuteButton;
+
+#[derive(Component)]
+struct MuteLabel;
 
 #[derive(Component)]
 struct BiomeText;
@@ -26,17 +36,44 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_hud)
-            .add_systems(OnEnter(RunState::GameOver), show_game_over)
             .add_systems(OnExit(RunState::GameOver), hide_game_over)
             .add_systems(
                 Update,
                 (update_score_text, update_biome_text, update_threat_text)
                     .run_if(in_state(RunState::Running)),
             )
+            // The overlay waits for the orca's catch animation, and restart
+            // (key or tap) only arms once the overlay is up.
             .add_systems(
                 Update,
-                restart_on_key.run_if(in_state(RunState::GameOver)),
-            );
+                (
+                    show_game_over.run_if(catch_finished),
+                    restart_on_input.run_if(catch_finished),
+                )
+                    .run_if(in_state(RunState::GameOver)),
+            )
+            .add_systems(Update, mute_button);
+    }
+}
+
+/// Toggle the global mute from the HUD button (mouse or touch) or the
+/// M key (desktop).
+fn mute_button(
+    mut muted: ResMut<Muted>,
+    keys: Res<ButtonInput<KeyCode>>,
+    interactions: Query<&Interaction, (Changed<Interaction>, With<MuteButton>)>,
+    mut labels: Query<&mut Text, With<MuteLabel>>,
+) {
+    let pressed = keys.just_pressed(KeyCode::KeyM)
+        || interactions
+            .iter()
+            .any(|interaction| *interaction == Interaction::Pressed);
+    if !pressed {
+        return;
+    }
+    muted.0 = !muted.0;
+    for mut label in &mut labels {
+        label.0 = if muted.0 { "SOUND OFF" } else { "SOUND ON" }.to_string();
     }
 }
 
@@ -45,7 +82,7 @@ fn setup_hud(mut commands: Commands) {
         ScoreText,
         Text::new("Score: 0"),
         TextFont {
-            font_size: 24.0,
+            font_size: 20.0,
             ..default()
         },
         TextColor(Color::WHITE),
@@ -60,7 +97,7 @@ fn setup_hud(mut commands: Commands) {
         BiomeText,
         Text::new("ICE"),
         TextFont {
-            font_size: 24.0,
+            font_size: 20.0,
             ..default()
         },
         TextColor(Color::WHITE),
@@ -75,7 +112,7 @@ fn setup_hud(mut commands: Commands) {
         ThreatText,
         Text::new(""),
         TextFont {
-            font_size: 20.0,
+            font_size: 18.0,
             ..default()
         },
         TextColor(Color::WHITE),
@@ -86,6 +123,35 @@ fn setup_hud(mut commands: Commands) {
             ..default()
         },
     ));
+    // Sound toggle, tucked under the biome label. Bevy's Button reacts to
+    // both mouse and touch.
+    commands
+        .spawn((
+            MuteButton,
+            Button,
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(44.0),
+                right: Val::Px(14.0),
+                padding: UiRect::axes(Val::Px(10.0), Val::Px(5.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BorderColor(Color::srgba(1.0, 1.0, 1.0, 0.55)),
+            BorderRadius::all(Val::Px(6.0)),
+            BackgroundColor(Color::srgba(0.0, 0.05, 0.12, 0.45)),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                MuteLabel,
+                Text::new("SOUND ON"),
+                TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+            ));
+        });
 }
 
 fn update_score_text(score: Res<Score>, mut texts: Query<&mut Text, With<ScoreText>>) {
@@ -105,8 +171,8 @@ fn update_biome_text(
         return;
     }
     // Keep labels short (and ASCII: the default font subset has no em-dash)
-    // so the right-anchored text never collides with the score on narrow
-    // canvases.
+    // and fonts modest so the right-anchored text never collides with the
+    // score, even on narrow phone canvases.
     let label = match biome.get() {
         Biome::Ice => "ICE",
         Biome::Water => "WATER",
@@ -144,7 +210,14 @@ fn update_threat_text(
     }
 }
 
-fn show_game_over(mut commands: Commands, score: Res<Score>) {
+fn show_game_over(
+    mut commands: Commands,
+    score: Res<Score>,
+    existing: Query<Entity, With<GameOverUi>>,
+) {
+    if !existing.is_empty() {
+        return;
+    }
     commands
         .spawn((
             GameOverUi,
@@ -179,7 +252,7 @@ fn show_game_over(mut commands: Commands, score: Res<Score>) {
                 TextColor(Color::WHITE),
             ));
             parent.spawn((
-                Text::new("Press R or Enter to restart"),
+                Text::new("Press R / Enter or tap to restart"),
                 TextFont {
                     font_size: 22.0,
                     ..default()
@@ -196,21 +269,27 @@ fn hide_game_over(mut commands: Commands, overlays: Query<Entity, With<GameOverU
 }
 
 /// Full reset: sweep spawned entities, restore every gameplay resource to
-/// its starting value, re-plant the penguin, and run it back from the ice.
-fn restart_on_key(
+/// its starting value, re-plant the penguin (and un-lunge the orca), and
+/// run it back from the ice. Triggered by R/Enter or a tap.
+fn restart_on_input(
     keys: Res<ButtonInput<KeyCode>>,
+    mut taps: EventReader<TouchAction>,
     mut commands: Commands,
     movers: Query<Entity, With<Mover>>,
     mut players: Query<(&mut Transform, &mut TargetLane, &mut Vertical), With<Player>>,
+    mut orcas: Query<&mut Transform, (With<Orca>, Without<Player>)>,
     mut next_biome: ResMut<NextState<Biome>>,
     mut next_run: ResMut<NextState<RunState>>,
 ) {
-    if !(keys.just_pressed(KeyCode::KeyR) || keys.just_pressed(KeyCode::Enter)) {
+    let tapped = taps.read().any(|action| *action == TouchAction::Tap);
+    if !(keys.just_pressed(KeyCode::KeyR) || keys.just_pressed(KeyCode::Enter) || tapped) {
         return;
     }
     for entity in &movers {
         commands.entity(entity).despawn();
     }
+    commands.remove_resource::<CatchSequence>();
+    commands.remove_resource::<LayerTransition>();
     commands.insert_resource(OrcaGap::default());
     commands.insert_resource(Score::default());
     commands.insert_resource(RunSpeed::default());
@@ -220,11 +299,16 @@ fn restart_on_key(
     for (mut transform, mut lane, mut vertical) in &mut players {
         transform.translation = Vec3::new(0.0, GROUND_Y, 0.0);
         transform.scale = Vec3::ONE;
+        transform.rotation = Quat::IDENTITY;
         lane.0 = 0;
         *vertical = Vertical {
             grounded: true,
             ..default()
         };
+    }
+    for mut transform in &mut orcas {
+        transform.translation = Vec3::new(0.0, -0.1, ORCA_VISUAL_Z.1);
+        transform.rotation = Quat::IDENTITY;
     }
     next_biome.set(Biome::Ice);
     next_run.set(RunState::Running);

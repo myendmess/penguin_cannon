@@ -161,6 +161,23 @@ pub struct Collectible {
 #[derive(Component)]
 pub struct CannonPickup;
 
+/// Marker for the cannon's pulsing gold beacon.
+#[derive(Component)]
+pub struct CannonBeacon;
+
+/// Expanding one-shot muzzle flash left behind when a cannon fires.
+#[derive(Component)]
+pub struct Flash {
+    timer: Timer,
+}
+
+/// Constant drift applied to decor on top of the track scroll — snowfall,
+/// rising bubbles, sideways cloud drift.
+#[derive(Component)]
+pub struct DecorMotion {
+    pub velocity: Vec3,
+}
+
 /// Wing pivot on a bird obstacle; `side` is -1.0/1.0, `phase` staggers the
 /// flap so a flock never beats in unison.
 #[derive(Component)]
@@ -211,6 +228,9 @@ impl Plugin for SpawnPlugin {
                     collide_player,
                     score_distance,
                     flap_bird_wings,
+                    animate_cannons,
+                    animate_flashes,
+                    drift_decor,
                 )
                     .chain()
                     .run_if(in_state(RunState::Running)),
@@ -468,6 +488,53 @@ fn flap_bird_wings(time: Res<Time>, mut wings: Query<(&BirdWing, &mut Transform)
     }
 }
 
+/// Idle cannon showmanship: the beacon pulses and the barrel sways,
+/// begging to be run into.
+fn animate_cannons(
+    time: Res<Time>,
+    mut beacons: Query<&mut Transform, With<CannonBeacon>>,
+    mut barrels: Query<&mut Transform, (With<CannonPickup>, Without<CannonBeacon>)>,
+) {
+    let t = time.elapsed_secs();
+    let pulse = 1.0 + 0.3 * (t * 6.0).sin();
+    for mut transform in &mut beacons {
+        transform.scale = Vec3::splat(pulse);
+    }
+    let sway = 0.08 * (t * 2.2).sin();
+    for mut transform in &mut barrels {
+        transform.rotation = Quat::from_rotation_x(0.6) * Quat::from_rotation_z(sway);
+    }
+}
+
+/// The muzzle flash left behind by a fired cannon: balloons out and vanishes.
+fn animate_flashes(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut flashes: Query<(Entity, &mut Flash, &mut Transform)>,
+) {
+    for (entity, mut flash, mut transform) in &mut flashes {
+        flash.timer.tick(time.delta());
+        transform.scale = Vec3::splat(1.0 + flash.timer.fraction() * 9.0);
+        if flash.timer.finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+/// Background life: snow falls (and settles), bubbles rise, clouds drift.
+fn drift_decor(time: Res<Time>, mut decor: Query<(&mut DecorMotion, &mut Transform)>) {
+    let dt = time.delta_secs();
+    for (mut motion, mut transform) in &mut decor {
+        let velocity = motion.velocity;
+        transform.translation += velocity * dt;
+        // Falling snow settles on the ice instead of sinking through it.
+        if velocity.y < 0.0 && transform.translation.y <= 0.08 {
+            transform.translation.y = 0.08;
+            motion.velocity = Vec3::ZERO;
+        }
+    }
+}
+
 fn spawn_collectible_line(
     commands: &mut Commands,
     assets: &SpawnAssets,
@@ -520,6 +587,7 @@ fn spawn_cannon(commands: &mut Commands, assets: &SpawnAssets, rng: &mut GameRng
         .with_children(|parent| {
             // Golden beacon: rare pickup = maximum visual salience.
             parent.spawn((
+                CannonBeacon,
                 Mesh3d(assets.cannon_beacon.0.clone()),
                 MeshMaterial3d(assets.cannon_beacon.1.clone()),
                 Transform::from_xyz(0.0, 1.5, 0.0),
@@ -528,28 +596,49 @@ fn spawn_cannon(commands: &mut Commands, assets: &SpawnAssets, rng: &mut GameRng
 }
 
 fn spawn_decor(commands: &mut Commands, assets: &SpawnAssets, rng: &mut GameRng, biome: Biome) {
-    let (asset, x, y, scale) = match biome {
-        Biome::Ice => (
-            &assets.decor_ice,
-            rng.range(-6.0, 6.0),
-            0.1,
-            Vec3::splat(rng.range(0.6, 1.4)),
-        ),
+    // (asset, position, scale, extra drift on top of the track scroll)
+    let (asset, x, y, scale, velocity) = match biome {
+        Biome::Ice => {
+            if rng.chance(0.55) {
+                // Snowfall: drifts down and settles on the shelf.
+                (
+                    &assets.decor_ice,
+                    rng.range(-7.0, 7.0),
+                    rng.range(3.5, 8.0),
+                    Vec3::splat(rng.range(0.3, 0.6)),
+                    Vec3::new(rng.range(-0.35, 0.35), rng.range(-1.6, -1.0), 0.0),
+                )
+            } else {
+                // Ice pebbles resting on the shelf.
+                (
+                    &assets.decor_ice,
+                    rng.range(-6.0, 6.0),
+                    0.1,
+                    Vec3::splat(rng.range(0.6, 1.4)),
+                    Vec3::ZERO,
+                )
+            }
+        }
         Biome::Water => (
+            // Bubbles rise and wobble.
             &assets.decor_water,
             rng.range(-6.0, 6.0),
-            rng.range(0.3, 5.0),
+            rng.range(0.3, 4.0),
             Vec3::splat(rng.range(0.5, 1.2)),
+            Vec3::new(rng.range(-0.2, 0.2), rng.range(0.5, 1.0), 0.0),
         ),
         Biome::Sky => (
+            // Clouds drift sideways.
             &assets.decor_sky,
             rng.range(-9.0, 9.0),
             rng.range(0.2, 5.5),
             Vec3::new(rng.range(1.2, 2.2), 0.7, rng.range(1.0, 1.8)),
+            Vec3::new(rng.range(-0.5, 0.5), 0.0, 0.0),
         ),
     };
     commands.spawn((
         Mover,
+        DecorMotion { velocity },
         Mesh3d(asset.0.clone()),
         MeshMaterial3d(asset.1.clone()),
         Transform::from_xyz(x, y, SPAWN_Z).with_scale(scale),
@@ -560,6 +649,7 @@ fn spawn_decor(commands: &mut Commands, assets: &SpawnAssets, rng: &mut GameRng,
 /// feed the orca; collectibles score; the cannon fires the penguin skyward.
 fn collide_player(
     mut commands: Commands,
+    assets: Res<SpawnAssets>,
     mut speed: ResMut<RunSpeed>,
     mut score: ResMut<Score>,
     mut altitude: ResMut<Altitude>,
@@ -627,6 +717,16 @@ fn collide_player(
 
     for (entity, transform, collider) in &cannons {
         if overlaps(transform, &collider.half) {
+            // Muzzle flash marks the launch point while the biome flips.
+            commands.spawn((
+                Flash {
+                    timer: Timer::from_seconds(0.35, TimerMode::Once),
+                },
+                Mover,
+                Mesh3d(assets.cannon_beacon.0.clone()),
+                MeshMaterial3d(assets.cannon_beacon.1.clone()),
+                Transform::from_translation(transform.translation + Vec3::Y * 1.2),
+            ));
             commands.entity(entity).despawn();
             cues.write(AudioCue::CannonLaunch);
             states::launch_to_sky(&mut next_biome);

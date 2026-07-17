@@ -15,6 +15,8 @@ pub mod audio;
 pub mod chaser;
 pub mod player;
 pub mod spawn;
+pub mod touch;
+pub mod transitions;
 pub mod ui;
 pub mod world;
 
@@ -56,6 +58,8 @@ pub fn run() {
             chaser::ChaserPlugin,
             ui::UiPlugin,
             audio::GameAudioPlugin,
+            touch::TouchControlsPlugin,
+            transitions::LayerTransitionPlugin,
         ))
         .run();
 }

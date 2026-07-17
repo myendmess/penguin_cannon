@@ -42,16 +42,22 @@ struct GameSounds {
 #[derive(Component)]
 struct AmbienceLoop;
 
+/// Global mute toggle, flipped by the HUD sound button.
+#[derive(Resource, Default)]
+pub struct Muted(pub bool);
+
 pub struct GameAudioPlugin;
 
 impl Plugin for GameAudioPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<AudioCue>()
+            .init_resource::<Muted>()
             .add_systems(Startup, (load_sounds, start_ambience).chain())
             .add_systems(
                 Update,
                 (play_cues, play_hits).run_if(in_state(RunState::Running)),
             )
+            .add_systems(Update, apply_mute)
             // The initial OnEnter(Ice) fires in PreStartup, before sounds
             // are loaded — `start_ambience` covers the first loop, these
             // cover every later biome switch.
@@ -100,9 +106,14 @@ fn play_cues(
     mut commands: Commands,
     mut rng: ResMut<GameRng>,
     sounds: Option<Res<GameSounds>>,
+    muted: Res<Muted>,
     mut cues: EventReader<AudioCue>,
 ) {
     let Some(sounds) = sounds else { return };
+    if muted.0 {
+        cues.read().for_each(drop);
+        return;
+    }
     for cue in cues.read() {
         let (handle, volume) = match cue {
             AudioCue::CollectFish => (&sounds.collect_fish, 0.5),
@@ -118,50 +129,82 @@ fn play_hits(
     mut commands: Commands,
     mut rng: ResMut<GameRng>,
     sounds: Option<Res<GameSounds>>,
+    muted: Res<Muted>,
     mut hits: EventReader<ObstacleHit>,
 ) {
     let Some(sounds) = sounds else { return };
+    if muted.0 {
+        hits.read().for_each(drop);
+        return;
+    }
     for _ in hits.read() {
         spawn_sfx(&mut commands, &mut rng, &sounds.hit, 0.8);
     }
 }
 
-fn play_splash(mut commands: Commands, mut rng: ResMut<GameRng>, sounds: Option<Res<GameSounds>>) {
+fn play_splash(
+    mut commands: Commands,
+    mut rng: ResMut<GameRng>,
+    sounds: Option<Res<GameSounds>>,
+    muted: Res<Muted>,
+) {
     let Some(sounds) = sounds else { return };
-    spawn_sfx(&mut commands, &mut rng, &sounds.splash, 0.6);
+    if !muted.0 {
+        spawn_sfx(&mut commands, &mut rng, &sounds.splash, 0.6);
+    }
 }
 
 fn play_game_over(
     mut commands: Commands,
     mut rng: ResMut<GameRng>,
     sounds: Option<Res<GameSounds>>,
+    muted: Res<Muted>,
 ) {
     let Some(sounds) = sounds else { return };
-    spawn_sfx(&mut commands, &mut rng, &sounds.game_over, 0.7);
+    if !muted.0 {
+        spawn_sfx(&mut commands, &mut rng, &sounds.game_over, 0.7);
+    }
 }
 
-fn start_ambience(
-    commands: Commands,
-    sounds: Option<Res<GameSounds>>,
-    biome: Res<State<Biome>>,
-    loops: Query<Entity, With<AmbienceLoop>>,
-) {
-    swap_ambience(commands, sounds, biome, loops);
-}
-
-/// Cross-biome ambience: stop the old bed, start the new one. Loops are
-/// authored with integer-cycle LFOs so the wrap point is inaudible.
-fn swap_ambience(
+/// React to the mute toggle: silence every live sink immediately; on
+/// unmute, restart the ambience bed at its proper volume (one-shots are
+/// too short to bother resurrecting).
+fn apply_mute(
     mut commands: Commands,
+    muted: Res<Muted>,
     sounds: Option<Res<GameSounds>>,
     biome: Res<State<Biome>>,
     loops: Query<Entity, With<AmbienceLoop>>,
+    mut sinks: Query<&mut AudioSink>,
 ) {
-    let Some(sounds) = sounds else { return };
-    for entity in &loops {
+    if !muted.is_changed() || muted.is_added() {
+        return;
+    }
+    if muted.0 {
+        for mut sink in &mut sinks {
+            sink.set_volume(Volume::Linear(0.0));
+        }
+    } else if let Some(sounds) = sounds {
+        respawn_ambience(&mut commands, &sounds, *biome.get(), false, &loops);
+    }
+}
+
+/// Stop the old ambience bed and start the right one for `biome`. Loops
+/// are authored with integer-cycle LFOs so the wrap point is inaudible.
+fn respawn_ambience(
+    commands: &mut Commands,
+    sounds: &GameSounds,
+    biome: Biome,
+    muted: bool,
+    loops: &Query<Entity, With<AmbienceLoop>>,
+) {
+    for entity in loops {
         commands.entity(entity).despawn();
     }
-    let (handle, volume) = match biome.get() {
+    if muted {
+        return;
+    }
+    let (handle, volume) = match biome {
         Biome::Ice => (&sounds.amb_ice, 0.35),
         Biome::Water => (&sounds.amb_water, 0.4),
         Biome::Sky => (&sounds.amb_sky, 0.3),
@@ -175,4 +218,25 @@ fn swap_ambience(
             ..default()
         },
     ));
+}
+
+fn start_ambience(
+    commands: Commands,
+    sounds: Option<Res<GameSounds>>,
+    biome: Res<State<Biome>>,
+    muted: Res<Muted>,
+    loops: Query<Entity, With<AmbienceLoop>>,
+) {
+    swap_ambience(commands, sounds, biome, muted, loops);
+}
+
+fn swap_ambience(
+    mut commands: Commands,
+    sounds: Option<Res<GameSounds>>,
+    biome: Res<State<Biome>>,
+    muted: Res<Muted>,
+    loops: Query<Entity, With<AmbienceLoop>>,
+) {
+    let Some(sounds) = sounds else { return };
+    respawn_ambience(&mut commands, &sounds, *biome.get(), muted.0, &loops);
 }

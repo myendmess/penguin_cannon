@@ -107,6 +107,21 @@ All values are hypotheses until playtested. `[P]` = placeholder.
 
 ## Changelog
 
+- **0.5** — mobile + animation pass (branch `ux_update`):
+  - Sound toggle button top-right (mouse and touch).
+  - Phone controls: swipe left/right = lane dodge, swipe up = jump/swim
+    up/pitch up, swipe down = slide/dive (vertical swipes emulate a short
+    hold), tap = restart after game over. Page locks scroll/zoom gestures.
+  - Cannon: beacon pulses, barrel sways; firing leaves an expanding
+    muzzle flash.
+  - Orca catch: on game over the orca lunges and rears over the penguin,
+    which vanishes mid-lunge; the overlay waits for the kill.
+  - Layer-crossing logic + animation (the game's three vertical layers):
+    Ice→Water nose-dive with splash droplets, Water→Ice surface hop,
+    cannon launch backflip, Sky→Water re-entry dive. Steering locks
+    during the crossing so the moment reads.
+  - Background animation per biome: falling snow that settles on the
+    shelf, rising bubbles, drifting clouds.
 - **0.4** — audio + bird detail (branch `audio_update`):
   - Full SFX/ambience pass: procedurally synthesized PCM WAVs (see
     docs/AUDIO.md and tools/gen_sounds.py), event-driven through

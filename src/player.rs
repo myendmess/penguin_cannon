@@ -6,6 +6,8 @@ use bevy::prelude::*;
 
 use crate::audio::AudioCue;
 use crate::states::{Altitude, Biome, RunState, SkyPitch};
+use crate::touch::{TouchAction, TouchIntent};
+use crate::transitions::transition_inactive;
 use crate::tuning::*;
 
 /// Marker for the player entity (the penguin root).
@@ -52,7 +54,8 @@ impl Plugin for PlayerPlugin {
             .add_systems(
                 Update,
                 (
-                    steer_lanes,
+                    // Steering pauses while a layer-crossing animation plays.
+                    steer_lanes.run_if(transition_inactive),
                     apply_lane_position,
                     vertical_ice.run_if(in_state(Biome::Ice)),
                     vertical_water.run_if(in_state(Biome::Water)),
@@ -261,15 +264,30 @@ fn down_held(keys: &ButtonInput<KeyCode>) -> bool {
     keys.pressed(KeyCode::ArrowDown) || keys.pressed(KeyCode::KeyS)
 }
 
-/// Lane input: retargets immediately, ignored at the outer lanes
-/// (see GDD "Lane Dodge" edge cases).
-fn steer_lanes(keys: Res<ButtonInput<KeyCode>>, mut players: Query<&mut TargetLane, With<Player>>) {
-    let left = left_just_pressed(&keys);
-    let right = right_just_pressed(&keys);
-    if left == right {
+/// Lane input (keys or swipes): retargets immediately, ignored at the
+/// outer lanes (see GDD "Lane Dodge" edge cases).
+fn steer_lanes(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut touch_actions: EventReader<TouchAction>,
+    mut players: Query<&mut TargetLane, With<Player>>,
+) {
+    let mut step: i8 = 0;
+    if left_just_pressed(&keys) {
+        step -= 1;
+    }
+    if right_just_pressed(&keys) {
+        step += 1;
+    }
+    for action in touch_actions.read() {
+        match action {
+            TouchAction::SwipeLeft => step -= 1,
+            TouchAction::SwipeRight => step += 1,
+            _ => {}
+        }
+    }
+    if step == 0 {
         return;
     }
-    let step: i8 = if right { 1 } else { -1 };
     for mut lane in &mut players {
         lane.0 = (lane.0 + step).clamp(-1, 1);
     }
@@ -294,12 +312,17 @@ fn vertical_ice(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     physics: Res<BiomePhysics>,
+    touch: Res<TouchIntent>,
+    mut touch_actions: EventReader<TouchAction>,
     mut cues: EventWriter<AudioCue>,
     mut players: Query<(&mut Vertical, &mut Transform), With<Player>>,
 ) {
     let dt = time.delta_secs();
+    let swipe_jump = touch_actions
+        .read()
+        .any(|action| *action == TouchAction::SwipeUp);
     for (mut vertical, mut transform) in &mut players {
-        if vertical.grounded && up_just_pressed(&keys) {
+        if vertical.grounded && (up_just_pressed(&keys) || swipe_jump) {
             vertical.velocity = JUMP_IMPULSE;
             vertical.grounded = false;
             cues.write(AudioCue::Jump);
@@ -314,7 +337,7 @@ fn vertical_ice(
             }
         }
         // Belly-slide: squash the penguin and (via collision) shrink its hitbox.
-        vertical.sliding = vertical.grounded && down_held(&keys);
+        vertical.sliding = vertical.grounded && (down_held(&keys) || touch.down_held());
         transform.scale = if vertical.sliding {
             Vec3::new(1.0, 0.55, 1.0)
         } else {
@@ -324,13 +347,17 @@ fn vertical_ice(
 }
 
 /// Water: neutral buoyancy; W swims up, S dives, clamped to the swim band.
+/// Vertical swipes emulate a short hold (see `TouchIntent`).
 fn vertical_water(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
+    touch: Res<TouchIntent>,
     mut players: Query<(&mut Vertical, &mut Transform), With<Player>>,
 ) {
     let dt = time.delta_secs();
-    let direction = (up_held(&keys) as i8 - down_held(&keys) as i8) as f32;
+    let up = up_held(&keys) || touch.up_held();
+    let down = down_held(&keys) || touch.down_held();
+    let direction = (up as i8 - down as i8) as f32;
     for (mut vertical, mut transform) in &mut players {
         transform.translation.y =
             (transform.translation.y + direction * SWIM_SPEED * dt).clamp(SWIM_BAND.0, SWIM_BAND.1);
@@ -343,13 +370,14 @@ fn vertical_water(
 /// height on screen tracks remaining altitude, so the descent reads visually.
 fn vertical_sky(
     keys: Res<ButtonInput<KeyCode>>,
+    touch: Res<TouchIntent>,
     altitude: Res<Altitude>,
     mut pitch: ResMut<SkyPitch>,
     mut players: Query<&mut Transform, With<Player>>,
 ) {
-    *pitch = if up_held(&keys) {
+    *pitch = if up_held(&keys) || touch.up_held() {
         SkyPitch::Up
-    } else if down_held(&keys) {
+    } else if down_held(&keys) || touch.down_held() {
         SkyPitch::Dive
     } else {
         SkyPitch::Level

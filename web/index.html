@@ -12,6 +12,11 @@
       height: 100%;
       background: #0e1a26;
       overflow: hidden;
+      /* Phone: the game owns all gestures — no scroll, zoom, or selection. */
+      touch-action: none;
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
     }
     #game-container {
       width: 100vw;

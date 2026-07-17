@@ -94,6 +94,31 @@ pub const MOTION_BLUR_SHUTTER: f32 = 0.5;
 /// Motion blur sample count — quality vs GPU cost (kept low for WebGL2). [PLACEHOLDER]
 pub const MOTION_BLUR_SAMPLES: u32 = 2;
 
+// --- Touch controls -------------------------------------------------------------
+
+/// Finger travel (logical px) before a touch counts as a swipe. [PLACEHOLDER]
+pub const SWIPE_THRESHOLD_PX: f32 = 48.0;
+/// How long a vertical swipe emulates a held key (swim/pitch). [PLACEHOLDER]
+pub const TOUCH_HOLD_SECS: f32 = 0.55;
+
+// --- Layer-crossing transitions ---------------------------------------------------
+
+/// Ice -> Water dive animation length, seconds. [PLACEHOLDER]
+pub const TRANSITION_DIVE_SECS: f32 = 0.6;
+/// Water -> Ice surface-hop animation length. [PLACEHOLDER]
+pub const TRANSITION_SURFACE_SECS: f32 = 0.55;
+/// Cannon-launch backflip length. [PLACEHOLDER]
+pub const TRANSITION_LAUNCH_SECS: f32 = 0.85;
+/// Sky -> Water re-entry animation length. [PLACEHOLDER]
+pub const TRANSITION_SPLASHDOWN_SECS: f32 = 0.7;
+/// Droplets kicked up when the penguin pierces the water surface.
+pub const SPLASH_DROPLETS: usize = 7;
+
+// --- Game-over catch sequence -------------------------------------------------------
+
+/// Orca lunge duration before the game-over overlay appears. [PLACEHOLDER]
+pub const CATCH_SEQUENCE_SECS: f32 = 1.1;
+
 // --- Scoring ------------------------------------------------------------------
 
 /// Points per fish. Locked.

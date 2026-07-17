@@ -6,12 +6,24 @@ use bevy::prelude::*;
 
 use crate::chase::{ChasePlugin, OrcaGap};
 use crate::player::Player;
-use crate::states::Biome;
+use crate::states::{Biome, RunState};
 use crate::tuning::*;
 
 /// Marker for the orca entity root.
 #[derive(Component)]
 pub struct Orca;
+
+/// Present while (and after) the orca's game-over lunge plays. The
+/// game-over overlay waits for [`catch_finished`].
+#[derive(Resource)]
+pub struct CatchSequence {
+    timer: Timer,
+}
+
+/// Run condition: the catch animation has fully played out.
+pub fn catch_finished(sequence: Option<Res<CatchSequence>>) -> bool {
+    sequence.is_some_and(|s| s.timer.finished())
+}
 
 pub struct ChaserPlugin;
 
@@ -23,8 +35,53 @@ impl Plugin for ChaserPlugin {
             .add_systems(OnEnter(Biome::Sky), hide_orca)
             .add_systems(OnEnter(Biome::Ice), show_orca)
             .add_systems(OnEnter(Biome::Water), show_orca)
-            .add_systems(Update, position_orca);
+            .add_systems(OnEnter(RunState::GameOver), start_catch)
+            .add_systems(
+                Update,
+                (
+                    position_orca.run_if(in_state(RunState::Running)),
+                    animate_catch.run_if(in_state(RunState::GameOver)),
+                ),
+            );
     }
+}
+
+fn start_catch(mut commands: Commands) {
+    commands.insert_resource(CatchSequence {
+        timer: Timer::from_seconds(CATCH_SEQUENCE_SECS, TimerMode::Once),
+    });
+}
+
+/// The kill shot: the orca rears up and lunges onto the penguin, which
+/// vanishes down the hatch in the final stretch of the sequence.
+fn animate_catch(
+    time: Res<Time>,
+    sequence: Option<ResMut<CatchSequence>>,
+    mut orcas: Query<&mut Transform, With<Orca>>,
+    mut players: Query<&mut Transform, (With<Player>, Without<Orca>)>,
+) {
+    let Some(mut sequence) = sequence else { return };
+    if sequence.timer.finished() {
+        return;
+    }
+    sequence.timer.tick(time.delta());
+    let progress = sequence.timer.fraction();
+    let dt = time.delta_secs();
+
+    let Ok(mut player) = players.single_mut() else {
+        return;
+    };
+    let mouth = player.translation + Vec3::new(0.0, 0.35, 0.7);
+    for mut orca in &mut orcas {
+        let step = (7.0 * dt).min(1.0);
+        orca.translation = orca.translation.lerp(mouth, step);
+        // Rear up over the penguin, then crash back down.
+        orca.rotation =
+            Quat::from_rotation_x(-0.6 * (progress * std::f32::consts::PI).sin());
+    }
+    // The penguin disappears during the last 40% of the lunge.
+    let shrink = ((progress - 0.6) / 0.4).clamp(0.0, 1.0);
+    player.scale = Vec3::splat((1.0 - shrink).max(0.001));
 }
 
 /// Blockout orca: black capsule lying along the track, white belly,
