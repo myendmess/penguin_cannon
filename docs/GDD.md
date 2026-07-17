@@ -107,6 +107,13 @@ All values are hypotheses until playtested. `[P]` = placeholder.
 
 ## Changelog
 
+- **0.6** — viewport + toggle polish:
+  - Camera fit: on narrow (portrait) windows the vertical FOV widens so
+    the horizontal frustum always spans all three lanes at the player's
+    depth — the penguin can no longer leave the frame on outer lanes.
+    (`CAMERA_*` constants in the tuning table.)
+  - Sound toggle is now a fixed-size icon button (volume-bars glyph;
+    dimmed + red x while muted) instead of SOUND ON/OFF text.
 - **0.5** — mobile + animation pass (branch `ux_update`):
   - Sound toggle button top-right (mouse and touch).
   - Phone controls: swipe left/right = lane dodge, swipe up = jump/swim

@@ -4,6 +4,7 @@
 use bevy::core_pipeline::motion_blur::MotionBlur;
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 
 use crate::states::Biome;
 use crate::tuning::*;
@@ -72,9 +73,42 @@ pub struct WorldPlugin;
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, (setup_camera_and_light, setup_track))
+            .add_systems(Update, fit_camera_to_lanes)
             .add_systems(OnEnter(Biome::Ice), apply_biome_visuals)
             .add_systems(OnEnter(Biome::Water), apply_biome_visuals)
             .add_systems(OnEnter(Biome::Sky), apply_biome_visuals);
+    }
+}
+
+/// Keep all three lanes in frame on any aspect ratio. A perspective
+/// camera's vertical FOV is fixed, so narrow (portrait) windows shrink the
+/// horizontal view and cut off the outer lanes. Whenever the window is
+/// narrow, widen the vertical FOV just enough that the horizontal frustum
+/// still spans [`CAMERA_VISIBLE_HALF_WIDTH`] at the player's depth:
+///
+///   tan(h_fov / 2) = aspect * tan(v_fov / 2)   (perspective projection)
+///   need: aspect * tan(v_fov / 2) >= half_width / player_depth
+fn fit_camera_to_lanes(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut projections: Query<&mut Projection, With<Camera3d>>,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let aspect = window.width() / window.height();
+    if !aspect.is_finite() || aspect <= 0.0 {
+        return;
+    }
+    let required_half_tan = CAMERA_VISIBLE_HALF_WIDTH / CAMERA_PLAYER_DEPTH;
+    let required_v_fov = 2.0 * (required_half_tan / aspect).atan();
+    let fov = required_v_fov.clamp(CAMERA_BASE_FOV, CAMERA_MAX_FOV);
+    for mut projection in &mut projections {
+        if let Projection::Perspective(perspective) = &mut *projection {
+            // Only write on real change so change detection stays quiet.
+            if (perspective.fov - fov).abs() > 0.001 {
+                perspective.fov = fov;
+            }
+        }
     }
 }
 

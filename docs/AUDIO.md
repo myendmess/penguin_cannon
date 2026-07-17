@@ -39,9 +39,11 @@ the wrap point is inaudible.
 
 ## Mute
 
-HUD button top-right (tap/click) or the M key. Muting zeroes every live
-sink immediately and suppresses new one-shots; unmuting restarts the
-current biome's ambience bed at its authored volume.
+HUD button top-right (tap/click) or the M key. The button shows a
+volume-bars glyph (white = on; dimmed + red x = muted) at a fixed size so
+toggling never shifts the layout. Muting zeroes every live sink
+immediately and suppresses new one-shots; unmuting restarts the current
+biome's ambience bed at its authored volume.
 
 ## Budget & constraints
 

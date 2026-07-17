@@ -19,8 +19,13 @@ struct ScoreText;
 #[derive(Component)]
 struct MuteButton;
 
+/// One bar of the volume glyph inside the mute button.
 #[derive(Component)]
-struct MuteLabel;
+struct MuteBar;
+
+/// The small red "x" overlaid on the glyph while muted.
+#[derive(Component)]
+struct MuteMark;
 
 #[derive(Component)]
 struct BiomeText;
@@ -57,12 +62,13 @@ impl Plugin for UiPlugin {
 }
 
 /// Toggle the global mute from the HUD button (mouse or touch) or the
-/// M key (desktop).
+/// M key (desktop). The glyph dims and gains a red "x" while muted.
 fn mute_button(
     mut muted: ResMut<Muted>,
     keys: Res<ButtonInput<KeyCode>>,
     interactions: Query<&Interaction, (Changed<Interaction>, With<MuteButton>)>,
-    mut labels: Query<&mut Text, With<MuteLabel>>,
+    mut bars: Query<&mut BackgroundColor, With<MuteBar>>,
+    mut marks: Query<&mut Visibility, With<MuteMark>>,
 ) {
     let pressed = keys.just_pressed(KeyCode::KeyM)
         || interactions
@@ -72,8 +78,20 @@ fn mute_button(
         return;
     }
     muted.0 = !muted.0;
-    for mut label in &mut labels {
-        label.0 = if muted.0 { "SOUND OFF" } else { "SOUND ON" }.to_string();
+    let bar_color = if muted.0 {
+        Color::srgba(1.0, 1.0, 1.0, 0.25)
+    } else {
+        Color::WHITE
+    };
+    for mut background in &mut bars {
+        background.0 = bar_color;
+    }
+    for mut visibility in &mut marks {
+        *visibility = if muted.0 {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
     }
 }
 
@@ -124,16 +142,24 @@ fn setup_hud(mut commands: Commands) {
         },
     ));
     // Sound toggle, tucked under the biome label. Bevy's Button reacts to
-    // both mouse and touch.
+    // both mouse and touch. The icon is a volume-bars glyph built from
+    // plain nodes (the default font subset has no speaker emoji): white
+    // bars = sound on, dimmed bars + red "x" = muted. The button's size is
+    // fixed, so toggling never shifts the layout.
     commands
         .spawn((
             MuteButton,
             Button,
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(44.0),
+                top: Val::Px(40.0),
                 right: Val::Px(14.0),
-                padding: UiRect::axes(Val::Px(10.0), Val::Px(5.0)),
+                width: Val::Px(40.0),
+                height: Val::Px(32.0),
+                align_items: AlignItems::End,
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(3.0),
+                padding: UiRect::bottom(Val::Px(6.0)),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
@@ -142,14 +168,33 @@ fn setup_hud(mut commands: Commands) {
             BackgroundColor(Color::srgba(0.0, 0.05, 0.12, 0.45)),
         ))
         .with_children(|parent| {
+            for height in [7.0, 12.0, 17.0] {
+                parent.spawn((
+                    MuteBar,
+                    Node {
+                        width: Val::Px(5.0),
+                        height: Val::Px(height),
+                        ..default()
+                    },
+                    BorderRadius::all(Val::Px(1.5)),
+                    BackgroundColor(Color::WHITE),
+                ));
+            }
             parent.spawn((
-                MuteLabel,
-                Text::new("SOUND ON"),
+                MuteMark,
+                Text::new("x"),
                 TextFont {
-                    font_size: 14.0,
+                    font_size: 16.0,
                     ..default()
                 },
-                TextColor(Color::WHITE),
+                TextColor(Color::srgb(1.0, 0.3, 0.25)),
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(0.0),
+                    right: Val::Px(3.0),
+                    ..default()
+                },
+                Visibility::Hidden,
             ));
         });
 }

@@ -6,6 +6,19 @@
 /// readability — obstacles and the penguin are sized against this.
 pub const LANE_WIDTH: f32 = 2.5;
 
+// --- Camera framing -----------------------------------------------------------
+
+/// Base vertical FOV (radians) used whenever the window is wide enough.
+pub const CAMERA_BASE_FOV: f32 = std::f32::consts::FRAC_PI_4;
+/// Horizontal half-extent (meters) that must stay in frame at the player's
+/// depth: outer lane edge (1.5 * LANE_WIDTH) + penguin + margin.
+pub const CAMERA_VISIBLE_HALF_WIDTH: f32 = 4.6;
+/// View-space depth of the player plane, derived from the camera transform
+/// in world.rs (camera at (0, 5.5, 9) looking at (0, 1, -12)).
+pub const CAMERA_PLAYER_DEPTH: f32 = 9.8;
+/// Never widen the FOV beyond this (extreme aspect ratios), radians.
+pub const CAMERA_MAX_FOV: f32 = 2.4;
+
 /// How far ahead of the player the track extends before fog swallows it.
 pub const TRACK_VIEW_DEPTH: f32 = 90.0;
 
