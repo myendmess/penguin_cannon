@@ -31,6 +31,8 @@ bevy = { version = "0.16", default-features = false, features = [
   "async_executor",
   "multi_threaded",
   "bevy_asset",
+  "bevy_audio",
+  "wav",
   "bevy_color",
   "bevy_core_pipeline",
   "bevy_log",
@@ -63,28 +65,21 @@ js-sys = "0.3"
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
 
-# Our code compiles fast, dependencies (Bevy) get full optimization once.
+# THE WEB BUILD SHIPS THE DEV PROFILE (wasm-pack --dev; see build-wasm.ps1
+# and the deploy workflow). Two hard-won wasm findings:
+#   1. `opt-level = "s"` (+ thin LTO) miscompiles: the text stack and audio
+#      device init hang the main thread. Dev's opt levels below are known
+#      good; bundle size is comparable to release.
+#   2. With bevy_audio, startup ALSO stalls nondeterministically unless the
+#      page has user activation (browser autoplay policy suspends the
+#      AudioContext cpal needs) — hence web/index.html gates init() behind
+#      a "tap to play" button. Don't remove that gate.
 [profile.dev]
 opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
 
-# Wasm-friendly release: favor binary size for web delivery.
+# Unused for web delivery (see above); kept sane for any native use.
 [profile.release]
-opt-level = "s"
-lto = "thin"
-
-# opt-level "s" miscompiles the glyph rasterization stack on wasm — the
-# first Text spawn hangs the main thread forever. (Dev builds, which
-# optimize these at level 3, render text fine.) Keep them at full opt.
-[profile.release.package.swash]
-opt-level = 3
-[profile.release.package.zeno]
-opt-level = 3
-[profile.release.package.cosmic-text]
-opt-level = 3
-[profile.release.package.rustybuzz]
-opt-level = 3
-[profile.release.package.ttf-parser]
 opt-level = 3

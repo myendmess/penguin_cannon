@@ -7,6 +7,7 @@
 
 use bevy::prelude::*;
 
+use crate::audio::AudioCue;
 use crate::chase::ObstacleHit;
 use crate::player::{Player, Vertical};
 use crate::states::{self, Altitude, Biome, RunState};
@@ -160,6 +161,14 @@ pub struct Collectible {
 #[derive(Component)]
 pub struct CannonPickup;
 
+/// Wing pivot on a bird obstacle; `side` is -1.0/1.0, `phase` staggers the
+/// flap so a flock never beats in unison.
+#[derive(Component)]
+pub struct BirdWing {
+    pub side: f32,
+    pub phase: f32,
+}
+
 /// Pre-built blockout meshes/materials for everything the spawner emits.
 #[derive(Resource)]
 pub struct SpawnAssets {
@@ -170,6 +179,8 @@ pub struct SpawnAssets {
     crab: (Handle<Mesh>, Handle<StandardMaterial>),
     plane: (Handle<Mesh>, Handle<StandardMaterial>),
     bird: (Handle<Mesh>, Handle<StandardMaterial>),
+    bird_wing: Handle<Mesh>,
+    bird_beak: (Handle<Mesh>, Handle<StandardMaterial>),
     fish: (Handle<Mesh>, Handle<StandardMaterial>),
     shrimp: (Handle<Mesh>, Handle<StandardMaterial>),
     cannon_barrel: (Handle<Mesh>, Handle<StandardMaterial>),
@@ -199,6 +210,7 @@ impl Plugin for SpawnPlugin {
                     advance_movers,
                     collide_player,
                     score_distance,
+                    flap_bird_wings,
                 )
                     .chain()
                     .run_if(in_state(RunState::Running)),
@@ -225,6 +237,7 @@ fn build_spawn_assets(
     let crab_red = solid(Color::srgb(0.85, 0.25, 0.15), 0.6);
     let plane_gray = solid(Color::srgb(0.75, 0.78, 0.82), 0.4);
     let bird_dark = solid(Color::srgb(0.25, 0.22, 0.28), 0.8);
+    let beak_orange = solid(Color::srgb(0.95, 0.6, 0.15), 0.6);
     let fish_silver = solid(Color::srgb(0.6, 0.8, 0.9), 0.2);
     let shrimp_pink = solid(Color::srgb(1.0, 0.55, 0.6), 0.5);
     let cannon_iron = solid(Color::srgb(0.2, 0.22, 0.26), 0.5);
@@ -255,6 +268,14 @@ fn build_spawn_assets(
         crab: (meshes.add(Cuboid::new(1.5, 0.8, 1.2)), crab_red),
         plane: (meshes.add(Cuboid::new(1.8, 0.8, 2.6)), plane_gray),
         bird: (meshes.add(Sphere::new(0.35)), bird_dark),
+        bird_wing: meshes.add(Cuboid::new(0.62, 0.05, 0.30)),
+        bird_beak: (
+            meshes.add(Cone {
+                radius: 0.08,
+                height: 0.22,
+            }),
+            beak_orange,
+        ),
         fish: (meshes.add(Sphere::new(0.3)), fish_silver),
         shrimp: (meshes.add(Sphere::new(0.24)), shrimp_pink),
         cannon_barrel: (meshes.add(Cylinder::new(0.45, 1.8)), cannon_iron),
@@ -395,6 +416,56 @@ fn spawn_obstacle(
             ));
         });
     }
+
+    // Birds fly at the player: sphere body plus head, orange beak, and two
+    // flapping wings hinged at the shoulder. Collider unchanged.
+    if kind == ObstacleKind::Bird {
+        let body = assets.bird.clone();
+        let wing_mesh = assets.bird_wing.clone();
+        let beak = assets.bird_beak.clone();
+        let phase = rng.range(0.0, std::f32::consts::TAU);
+        entity.with_children(|parent| {
+            // Head, toward the player (+Z is the approach direction).
+            parent.spawn((
+                Mesh3d(body.0.clone()),
+                MeshMaterial3d(body.1.clone()),
+                Transform::from_xyz(0.0, 0.17, 0.27).with_scale(Vec3::splat(0.55)),
+            ));
+            // Beak.
+            parent.spawn((
+                Mesh3d(beak.0),
+                MeshMaterial3d(beak.1),
+                Transform::from_xyz(0.0, 0.17, 0.48)
+                    .with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2)),
+            ));
+            // Wings: a pivot entity at the shoulder, mesh offset outward,
+            // so the flap hinges at the body instead of the wing's center.
+            for side in [-1.0f32, 1.0] {
+                parent
+                    .spawn((
+                        BirdWing { side, phase },
+                        Transform::from_xyz(side * 0.10, 0.08, 0.0),
+                        Visibility::default(),
+                    ))
+                    .with_children(|wing| {
+                        wing.spawn((
+                            Mesh3d(wing_mesh.clone()),
+                            MeshMaterial3d(body.1.clone()),
+                            Transform::from_xyz(side * 0.34, 0.0, 0.0),
+                        ));
+                    });
+            }
+        });
+    }
+}
+
+/// Wings beat fast, staggered per bird by their spawn phase.
+fn flap_bird_wings(time: Res<Time>, mut wings: Query<(&BirdWing, &mut Transform)>) {
+    let t = time.elapsed_secs();
+    for (wing, mut transform) in &mut wings {
+        let angle = 0.55 * (t * 13.0 + wing.phase).sin();
+        transform.rotation = Quat::from_rotation_z(wing.side * angle);
+    }
 }
 
 fn spawn_collectible_line(
@@ -493,6 +564,7 @@ fn collide_player(
     mut score: ResMut<Score>,
     mut altitude: ResMut<Altitude>,
     mut hits: EventWriter<ObstacleHit>,
+    mut cues: EventWriter<AudioCue>,
     mut next_biome: ResMut<NextState<Biome>>,
     biome: Res<State<Biome>>,
     players: Query<(&Transform, &Vertical), With<Player>>,
@@ -543,6 +615,11 @@ fn collide_player(
         if overlaps(transform, &collider.half) {
             if let Ok(collectible) = collectible_points.get(entity) {
                 score.points += collectible.points;
+                cues.write(if collectible.points == FISH_POINTS {
+                    AudioCue::CollectFish
+                } else {
+                    AudioCue::CollectShrimp
+                });
             }
             commands.entity(entity).despawn();
         }
@@ -551,6 +628,7 @@ fn collide_player(
     for (entity, transform, collider) in &cannons {
         if overlaps(transform, &collider.half) {
             commands.entity(entity).despawn();
+            cues.write(AudioCue::CannonLaunch);
             states::launch_to_sky(&mut next_biome);
         }
     }

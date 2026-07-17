@@ -107,6 +107,13 @@ All values are hypotheses until playtested. `[P]` = placeholder.
 
 ## Changelog
 
+- **0.4** — audio + bird detail (branch `audio_update`):
+  - Full SFX/ambience pass: procedurally synthesized PCM WAVs (see
+    docs/AUDIO.md and tools/gen_sounds.py), event-driven through
+    `src/audio.rs` — collect blips, jump, hit thud, cannon boom, splash,
+    game-over phrase, per-biome ambience loops.
+  - Birds upgraded from lone spheres to body + head + orange beak + two
+    shoulder-hinged flapping wings (flap phase randomized per bird).
 - **0.3** — penguin art pass and motion blur (branch `features_update`):
   - Penguin upgraded from 3-primitive blockout to a full primitive model:
     egg body, head with white face patch, bead eyes, orange beak, two

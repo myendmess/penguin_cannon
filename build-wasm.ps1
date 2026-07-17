@@ -16,7 +16,10 @@ $shim = "$env:USERPROFILE\.cargo\dlltool-shim"
 $selfContained = "$env:USERPROFILE\.rustup\toolchains\stable-x86_64-pc-windows-gnu\lib\rustlib\x86_64-pc-windows-gnu\bin\self-contained"
 $env:Path = "$env:USERPROFILE\.cargo\bin;$shim;$selfContained;$env:Path"
 
-wasm-pack build --target web --no-typescript --out-dir web/pkg
+# --dev is deliberate: release-profile wasm builds stall at runtime with
+# the audio stack enabled (see Cargo.toml profile notes). The dev profile
+# has deps at opt-level 3 and debuginfo stripped.
+wasm-pack build --dev --target web --no-typescript --out-dir web/pkg
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Done. Serve the web/ folder, e.g.:  python -m http.server 8000 -d web"

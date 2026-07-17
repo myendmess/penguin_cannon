@@ -40,7 +40,9 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Build wasm bundle
-        run: wasm-pack build --target web --no-typescript --out-dir web/pkg
+        # --dev is deliberate: release-profile wasm stalls at runtime with
+        # the audio stack (see Cargo.toml profile notes).
+        run: wasm-pack build --dev --target web --no-typescript --out-dir web/pkg
       - name: Drop wasm-pack's generated .gitignore from the site payload
         run: rm -f web/pkg/.gitignore
       - uses: actions/configure-pages@v5

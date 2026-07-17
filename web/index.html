@@ -34,7 +34,19 @@
       justify-content: center;
       color: #cfe8f7;
       font-family: system-ui, sans-serif;
-      pointer-events: none;
+    }
+    #play-button {
+      font-size: 1.4rem;
+      padding: 0.8em 2em;
+      border-radius: 999px;
+      border: 2px solid #cfe8f7;
+      background: rgba(207, 232, 247, 0.12);
+      color: #cfe8f7;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    #play-button:hover {
+      background: rgba(207, 232, 247, 0.3);
     }
   </style>
 </head>
@@ -44,22 +56,32 @@
   </div>
   <div id="loading">
     <h1>Penguin Cannon</h1>
-    <p>Loading the South Pole&hellip;</p>
+    <button id="play-button" type="button">&#9654; TAP TO PLAY</button>
+    <p id="loading-status"></p>
   </div>
   <script type="module">
     import init from "./pkg/penguin_cannon.js";
-    init()
-      .then(() => document.getElementById("loading").remove())
-      .catch((err) => {
-        // Bevy's wasm entry point traps a control-flow exception on
-        // startup by design; anything else is a real failure.
-        if (!err.message?.includes("Using exceptions for control flow")) {
-          document.querySelector("#loading p").textContent =
-            "Failed to load: " + err;
-          throw err;
-        }
-        document.getElementById("loading").remove();
-      });
+    // The game starts from a user gesture ON PURPOSE: the audio device
+    // needs user activation (browser autoplay policy) — initializing
+    // without it stalls engine startup nondeterministically. The click
+    // also spares visitors an unrequested multi-MB download.
+    const button = document.getElementById("play-button");
+    const status = document.getElementById("loading-status");
+    button.addEventListener("click", () => {
+      button.remove();
+      status.textContent = "Loading the South Pole…";
+      init()
+        .then(() => document.getElementById("loading").remove())
+        .catch((err) => {
+          // Bevy's wasm entry point traps a control-flow exception on
+          // startup by design; anything else is a real failure.
+          if (!err.message?.includes("Using exceptions for control flow")) {
+            status.textContent = "Failed to load: " + err;
+            throw err;
+          }
+          document.getElementById("loading").remove();
+        });
+    }, { once: true });
   </script>
 </body>
 </html>

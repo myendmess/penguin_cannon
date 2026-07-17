@@ -11,6 +11,7 @@ use bevy::prelude::*;
 // game code can keep `crate::states::...` paths.
 pub use penguin_core::{chase, states, tuning};
 
+pub mod audio;
 pub mod chaser;
 pub mod player;
 pub mod spawn;
@@ -21,17 +22,31 @@ pub mod world;
 /// wasm entry point.
 pub fn run() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Penguin Cannon".into(),
-                // The id of the <canvas> element in web/index.html.
-                canvas: Some("#penguin-cannon-canvas".into()),
-                fit_canvas_to_parent: true,
-                prevent_default_event_handling: true,
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Penguin Cannon".into(),
+                        // The id of the <canvas> element in web/index.html.
+                        canvas: Some("#penguin-cannon-canvas".into()),
+                        fit_canvas_to_parent: true,
+                        prevent_default_event_handling: true,
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    // Assets live in web/ so the wasm build (which fetches
+                    // relative to the page URL) and the deploy pipeline
+                    // share one copy; native runs point there explicitly.
+                    file_path: if cfg!(target_arch = "wasm32") {
+                        "assets".to_string()
+                    } else {
+                        "web/assets".to_string()
+                    },
+                    ..default()
+                }),
+        )
         .insert_resource(ClearColor(Color::srgb(0.72, 0.86, 0.96)))
         .add_plugins((
             states::GameStatePlugin,
@@ -40,6 +55,7 @@ pub fn run() {
             spawn::SpawnPlugin,
             chaser::ChaserPlugin,
             ui::UiPlugin,
+            audio::GameAudioPlugin,
         ))
         .run();
 }

@@ -4,6 +4,7 @@
 
 use bevy::prelude::*;
 
+use crate::audio::AudioCue;
 use crate::states::{Altitude, Biome, RunState, SkyPitch};
 use crate::tuning::*;
 
@@ -293,6 +294,7 @@ fn vertical_ice(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     physics: Res<BiomePhysics>,
+    mut cues: EventWriter<AudioCue>,
     mut players: Query<(&mut Vertical, &mut Transform), With<Player>>,
 ) {
     let dt = time.delta_secs();
@@ -300,6 +302,7 @@ fn vertical_ice(
         if vertical.grounded && up_just_pressed(&keys) {
             vertical.velocity = JUMP_IMPULSE;
             vertical.grounded = false;
+            cues.write(AudioCue::Jump);
         }
         if !vertical.grounded {
             vertical.velocity -= physics.gravity * dt;
